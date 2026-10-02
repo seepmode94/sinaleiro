@@ -44,6 +44,13 @@ select.mini { font: 8px/1 var(--font-px); padding: 5px 4px; border: 2px solid va
 .copy-row .pre { overflow-x: auto; white-space: nowrap; }
 .dir-list { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 6px; max-height: 40vh; overflow-y: auto; }
 .btn.dir { width: 100%; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.btn.danger { color: #a3271b; border-color: #a3271b; box-shadow: 0 3px 0 #a3271b; }
+.btn.danger.armed { background: #c4372a; color: #fff; }
+/* the Claude card's buttons: a tidy grid, two equal columns, one size of type for all (an odd last one spans both) */
+#sum-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+#sum-actions .btn { width: 100%; margin: 0; padding: 11px 8px; font: 10px/1.2 var(--font-px); text-align: center;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#sum-actions .btn:last-child:nth-child(odd) { grid-column: 1 / -1; }
 .dir-win { font: 20px/1.2 var(--font-body); margin: 0 0 8px; }
 
 @media (max-width: 760px) {
@@ -66,7 +73,9 @@ select.mini { font: 8px/1 var(--font-px); padding: 5px 4px; border: 2px solid va
 .decision .duel b { font: 8px/1.3 var(--font-px); font-weight: 400; overflow-wrap: anywhere; }
 .decision .vs { font-size: 28px; }
 .decision .choices { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-start; margin-top: 8px; }
-.decision .choices .btn { font-size: 9px; padding: 10px 12px; }
+.decision .choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.decision .choices .btn { width: 100%; margin: 0; padding: 11px 8px; text-align: center; white-space: normal; overflow-wrap: anywhere; }
+.decision .choices .btn:last-child:nth-child(odd) { grid-column: 1 / -1; }
 @media (prefers-reduced-motion: reduce) { .dec-tool.call { animation: none; } }
 
 /* the 5-hour limit: the account's window, what filled it here (green) and outside (blue) */
@@ -147,3 +156,6 @@ select.mini { font: 8px/1 var(--font-px); padding: 5px 4px; border: 2px solid va
   .dock .tool .lbl[data-short]::after { content: attr(data-short); font-size: 14px; }
   .dec-n { top: -6px; right: -2px; min-width: 18px; height: 18px; font-size: 8px; border-width: 2px; }
 }
+
+/* one size of type for every box's buttons, on every screen (the small in-list ones, .btn.mini, stay small) */
+.dlg .btn:not(.mini) { font-size: 10px; line-height: 1.2; }

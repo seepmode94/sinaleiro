@@ -303,6 +303,16 @@ class Handler(BaseHTTPRequestHandler):
                 store.grant(db, p, sid, to)
                 store.event(db, "grant", sid, [to], p, "release" if to == "*" else "grant", "from the farm UI")
             return self._json({"ok": True, "n": len(paths)})
+        if self.path == "/api/close":
+            # only the pane of a live session in the registry: never a pane named by the request
+            pane = self._pane(sid) if sid in live else None
+            if not pane:
+                return self._json({"error": "essa sessão não está no tmux (ou o chat está desligado)"}, 404)
+            if not tmux.close(pane):
+                return self._json({"error": "não consegui fechar o terminal"}, 500)
+            store.event(db, "say", sid, [], live[sid]["cwd"], "close",
+                        live[sid]["name"] + (" · do telemóvel" if self._remote() else ""))
+            return self._json({"ok": True})
         return self._json({"error": "not found"}, 404)
 
 

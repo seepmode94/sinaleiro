@@ -142,6 +142,17 @@ def window(name: str) -> bool:
     return False
 
 
+def close(pane: str) -> bool:
+    """Kill the pane, and with it the Claude in it (its tmux session goes too when it was the last pane, and any
+    terminal window attached to it closes)."""
+    r = _tmux("kill-pane", "-t", pane)
+    if r and r.returncode == 0:
+        global _panes
+        _panes = (0.0, {})  # the pane list changed: don't serve it from the cache
+        return True
+    return False
+
+
 def press(pane: str, key: str) -> bool:
     if key not in KEYS:
         return False

@@ -203,7 +203,9 @@ o ecrã dele e escrever-lhe. Com `--chat`, a quinta (no PC ou no telemóvel) pas
 - **responde às perguntas** com botões (`1`, `2`, `3`, `Enter`, `Esc`, setas, `Tab`), e só com essas teclas;
 - **abre um Claude novo** num tmux à parte: em "+ NOVA SESSÃO" (ou "+ CLAUDE" no chat) navegas pelas pastas a partir
   de `~/Documentos` e escolhes "ABRIR CLAUDE AQUI". No PC abre também uma janela de terminal ligada a esse tmux
-  (xfce4-terminal, gnome-terminal ou konsole); do telemóvel, nunca.
+  (xfce4-terminal, gnome-terminal ou konsole); do telemóvel, nunca;
+- **fecha o terminal** de um Claude: no cartão dele, "✕ FECHAR TERMINAL" (dois toques). Fecha o pane do tmux e,
+  com ele, o Claude e a janela ligada a esse tmux.
 
 ![O chat: a conversa com um Claude, o ecrã do terminal com a pergunta de permissão e os botões para responder](docs/img/chat.png)
 

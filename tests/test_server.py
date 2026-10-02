@@ -224,6 +224,28 @@ def test_without_chat_nothing_is_typed(farm):
     assert st == 404
 
 
+def test_close_kills_only_the_pane_of_a_live_session(chat_farm, monkeypatch):
+    from sinaleiro import tmux
+    srv, _ = chat_farm
+    port, killed = srv.server_address[1], []
+    monkeypatch.setattr(tmux, "close", lambda pane: killed.append(pane) or True)
+    assert post_local(port, "/api/close", {"session": "s2"})[0] == 404  # not in tmux
+    assert post_local(port, "/api/close", {"session": "%1"})[0] == 404  # a pane id is not a session
+    hdr = {"X-Sinaleiro": "1", "Origin": f"http://{LAN}:7777"}
+    assert call(port, "POST", "/api/close", body={"session": "s1"}, **hdr)[0] == 403  # the phone, without the token
+    assert killed == []
+    assert post_local(port, "/api/close", {"session": "s1"})[0] == 200 and killed == ["%1"]
+
+
+def test_without_chat_nothing_is_closed(farm, monkeypatch):
+    from sinaleiro import sessions, tmux
+    killed = []
+    monkeypatch.setattr(sessions, "registry", lambda: [{"id": "s1", "pid": 11, "name": "um", "cwd": "/tmp"}])
+    monkeypatch.setattr(tmux, "pane_of", lambda pid: "%1")
+    monkeypatch.setattr(tmux, "close", lambda pane: killed.append(pane) or True)
+    assert post_local(farm, "/api/close", {"session": "s1"})[0] == 404 and killed == []
+
+
 def test_spawn_only_under_home(tmp_path, monkeypatch):
     from sinaleiro import tmux
     monkeypatch.setattr(tmux, "_tmux", lambda *a, **k: type("R", (), {"returncode": 0})())

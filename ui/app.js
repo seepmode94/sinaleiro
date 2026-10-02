@@ -301,12 +301,25 @@ const UI = {
         : h("p", { class: "muted small", text: "Ainda não tocou em nada que o sinaleiro tenha visto (precisa do hook instalado e de uma sessão nova)." }),
       h("h3", { text: "CONVERSA" }),
       convo.length ? h("div", { class: "talk" }, convo.map((m) => this.turn(m, 220))) : h("p", { class: "muted small", text: d?.convo_hidden ? "🔒 A conversa fica no PC: no telemóvel vês o pedido, a ferramenta e os tokens." : d ? "Sem mensagens recentes." : "A carregar…" }));
+    // FECHAR TERMINAL: two taps (the first arms it for 4 s), since it ends the Claude
+    const armed = this.closeArm?.id === s.id && Date.now() < this.closeArm.until;
+    const closeBtn = !s.chat ? null : h("button", { class: "btn danger" + (armed ? " armed" : ""), type: "button", onclick: async () => {
+      if (!(this.closeArm?.id === s.id && Date.now() < this.closeArm.until)) {
+        this.closeArm = { id: s.id, until: Date.now() + 4000 };
+        setTimeout(() => { if ($("#dlg-summary").open && this.closeArm?.id === s.id) this.renderSummary(c); }, 4100);
+        return this.renderSummary(c);
+      }
+      this.closeArm = null;
+      try { await Sin.post("api/close", { session: s.id }); $("#dlg-summary").close(); UI.say(`Fechei o terminal de ${s.name}. O Claude dele sai da quinta.`); poll(true); }
+      catch (x) { UI.say("Não deu: " + x.message); this.renderSummary(c); }
+    }, title: "Fecha o terminal deste Claude (dois toques)" }, armed ? "CONFIRMAR" : "✕ FECHAR");
     fill($("#sum-actions"),
       s.chat ? h("button", { class: "btn primary", type: "button", onclick: () => Chat.open(s.id) }, "💬 CHAT") : null,
       Sin.raw?.viewer?.convo === false ? null : h("button", { class: "btn" + (s.chat ? "" : " primary"), type: "button", onclick: () => this.openTalk(s.id) }, "VER CONVERSA"),
       h("button", { class: "btn", type: "button", onclick: () => this.openLook(s, c) }, "APARÊNCIA"),
       Sin.raw?.viewer?.remote ? null : h("button", { class: "btn", type: "button", onclick: () => Sin.copy(d?.resume || `cd ${s.cwd} && claude --resume ${s.id}`, "o comando para retomar esta sessão") }, "COPIAR RETOMAR"),
-      h("button", { class: "btn", type: "button", onclick: () => { $("#dlg-summary").close(); Scene.focusCritter(c); } }, "CENTRAR"));
+      h("button", { class: "btn", type: "button", onclick: () => { $("#dlg-summary").close(); Scene.focusCritter(c); } }, "CENTRAR"),
+      closeBtn); // last: the one you don't want to hit by chance
   },
   renderSub(c) {
     const s = Sin.byId(c.agent.id), a = (s?.subagents || []).find((x) => x.id === c.sub.id) || c.sub;
@@ -419,7 +432,8 @@ const UI = {
     const f = Sin.base(e.path), o = e.other_names.join(", ");
     if (e.light === "red") return `${e.session_name} foi travado em ${f}: está com ${o}.`;
     if (e.light === "yellow") return `${e.session_name} foi avisado: ${o} anda por perto (${f}).`;
-    if (e.light === "say") return e.tool === "spawn" ? `Abriste um Claude novo em ${Sin.home(e.path)} (${e.note}).` : `Disseste a ${e.session_name}: ${e.note}`;
+    if (e.light === "say") return e.tool === "spawn" ? `Abriste um Claude novo em ${Sin.home(e.path)} (${e.note}).`
+      : e.tool === "close" ? `Fechaste o terminal de ${e.note}.` : `Disseste a ${e.session_name}: ${e.note}`;
     if (e.tool === "keep") return `Decidiste: ${f} fica com ${e.session_name}.`;
     if (e.tool === "release") return `${e.session_name} libertou ${f}${e.note ? " (pela quinta)" : ""}.`;
     return `${e.session_name} passou ${f} a ${o}${e.note ? " (pela quinta)" : ""}.`;
@@ -527,7 +541,7 @@ const UI = {
       [ds.length ? ds.map((d) => this.decisionCard(d)) : h("div", { class: "cross green" }, h("p", { class: "cross-h" }, h("span", { class: "lamp-dot green" }), "NADA PARA DECIDIR"),
         h("p", { class: "muted", text: "Quando o espantalho travar uma edição, a decisão aparece aqui e no botão DECISÕES da dock." })),
         h("p", { class: "muted small", text: "As sessões ficam a saber na próxima vez que tentarem editar: o espantalho diz-lhes o que decidiste." }),
-        h("p", { class: "small" }, h("button", { class: "btn mini", type: "button", onclick: () => this.openCop() }, "VER TODOS OS CRUZAMENTOS"))]);
+        h("div", { class: "dlg-actions left" }, h("button", { class: "btn", type: "button", onclick: () => this.openCop() }, "VER TODOS OS CRUZAMENTOS"))]);
   },
   openHelp() {
     const item = (k, v) => [h("dt", { text: k }), h("dd", { text: v })];
