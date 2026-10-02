@@ -212,7 +212,7 @@ def tokens_today(now: float | None = None) -> int:
     now = now or time.time()
     midnight = time.mktime(time.localtime(now)[:3] + (0, 0, 0, 0, 0, -1))
     total = 0
-    for p in _files():
+    for p in _transcript_paths():
         try:
             if os.path.getmtime(p) < midnight:
                 continue
@@ -226,7 +226,7 @@ def burns_since(since: float) -> list[tuple[float, str, int]]:
     """Every local (ts, model family, tokens) since `since`, across all transcripts, sub-agents' included: they spend
     the same limit."""
     out = []
-    for p in _files():
+    for p in _transcript_paths():
         try:
             if os.path.getmtime(p) < since:
                 continue
@@ -239,7 +239,7 @@ def burns_since(since: float) -> list[tuple[float, str, int]]:
 _listing: tuple[float, list[str]] = (0.0, [])
 
 
-def _files() -> list[str]:
+def _transcript_paths() -> list[str]:
     """Every transcript, the sessions' and their sub-agents' (they spend the same tokens), listed at most every 5 s."""
     global _listing
     if time.time() - _listing[0] > 5:

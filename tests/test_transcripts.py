@@ -37,3 +37,19 @@ def test_sub_agents_lines_count_too(tmp_path):
     t = Transcript(str(p))
     t.update()
     assert list(t.burns.values())[0][1:] == ("fable", 160)
+
+
+def test_the_farm_reads_through_the_cache(tmp_path, monkeypatch):
+    # the whole path the farm takes: list the transcripts, read each through the cache, add up today's tokens
+    from sinaleiro import transcripts
+    proj = tmp_path / "projects" / "p"
+    (proj / "s1" / "subagents").mkdir(parents=True)
+    import time as _t
+    now = _t.strftime("%Y-%m-%dT%H:%M:%SZ", _t.gmtime())
+    (proj / "s1.jsonl").write_text(line("m1", 5, ts=now) + "\n")
+    (proj / "s1" / "subagents" / "a.jsonl").write_text(line("m2", 5, ts=now, side=True) + "\n")
+    monkeypatch.setattr(transcripts, "CLAUDE_HOME", str(tmp_path))
+    monkeypatch.setattr(transcripts, "_listing", (0.0, []))
+    assert transcripts.get(str(proj / "s1.jsonl")).tokens  # the cache, not shadowed by anything
+    assert transcripts.tokens_today() == 2 * 115  # the session's and its sub-agent's
+    assert len(transcripts.burns_since(0)) == 2
