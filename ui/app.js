@@ -442,13 +442,45 @@ const UI = {
           h("span", { class: "roster-prompt", text: ss.map((s) => s.name).join(", ") })),
         h("span", { class: "roster-side" }, h("span", { class: "small", text: `${ss.length} sess${ss.length === 1 ? "ão" : "ões"}` })))))));
   },
-  openNew() {
+  /** + NOVA SESSÃO. With the chat on: walk the folders (from ~/Documentos) and open a Claude there, in tmux, with a
+   * terminal window on the PC; without it, the commands to copy. `then` runs after a Claude was opened. */
+  async openNew(path = "", then = null) {
     const dirs = [...new Set((Sin.raw?.sessions || []).map((s) => s.cwd))];
     const row = (cmd) => h("div", { class: "copy-row" }, h("code", { class: "pre", text: cmd }), h("button", { class: "btn", type: "button", onclick: () => Sin.copy(cmd, "o comando") }, "COPIAR"));
-    this.list("+ NOVA SESSÃO", "Cada sessão Claude Code que abrires nesta máquina entra na quinta sozinha, pelo portão do celeiro.",
-      [h("p", { text: "Abre um terminal e corre o Claude na pasta onde queres trabalhar:" }), row("claude"),
-        dirs.length ? [h("h3", { text: "NAS PASTAS ONDE JÁ HÁ SESSÕES" }), dirs.map((d) => row(`cd ${d} && claude`))] : null,
-        h("p", { class: "muted small", text: "Duas sessões no mesmo repo? O sinaleiro trata dos cruzamentos." })]);
+    const sub = "Cada sessão Claude Code que abrires nesta máquina entra na quinta sozinha, pelo portão do celeiro.";
+    if (!Sin.raw?.viewer?.chat) {
+      return this.list("+ NOVA SESSÃO", sub,
+        [h("p", { text: "Abre um terminal e corre o Claude na pasta onde queres trabalhar:" }), row("claude"),
+          dirs.length ? [h("h3", { text: "NAS PASTAS ONDE JÁ HÁ SESSÕES" }), dirs.map((d) => row(`cd ${d} && claude`))] : null,
+          h("p", { class: "muted small", text: "Para abrires Claudes daqui, a escolher a pasta, corre o servidor com: sinaleiro serve --lan --chat" })]);
+    }
+    let f;
+    try { const r = await fetch("api/dirs?path=" + encodeURIComponent(path), { cache: "no-store" }); f = await r.json(); if (!r.ok) throw new Error(f.error || r.status); }
+    catch (x) { return UI.say("Não deu para ver as pastas: " + x.message); }
+    const remote = !!Sin.raw?.viewer?.remote;
+    const win = remote ? null : h("input", { type: "checkbox", checked: true });
+    const go = async (cwd) => {
+      try {
+        const r = await Sin.post("api/spawn", { cwd, window: !!win?.checked });
+        UI.say(`Um Claude novo está a nascer em ${Sin.base(cwd)} (${r.tmux})${r.window ? ", com uma janela de terminal no PC" : ""}. Entra na quinta daqui a pouco.`);
+        $("#dlg-list").close(); then?.();
+      } catch (x) { UI.say("Não deu: " + x.message); }
+    };
+    const crumbs = Sin.home(f.path);
+    this.list("+ NOVA SESSÃO", sub, [
+      h("h3", { text: "ESCOLHE A PASTA" }),
+      h("div", { class: "copy-row" }, h("code", { class: "pre", text: crumbs }),
+        h("button", { class: "btn primary", type: "button", onclick: () => go(f.path) }, "ABRIR CLAUDE AQUI")),
+      win ? h("label", { class: "small dir-win" }, win, " Abrir também uma janela de terminal neste PC") : null,
+      h("ul", { class: "dir-list" },
+        f.parent ? h("li", {}, h("button", { class: "btn dir", type: "button", onclick: () => this.openNew(f.parent, then) }, "↑ ACIMA")) : null,
+        f.dirs.map((d) => h("li", {}, h("button", { class: "btn dir", type: "button", onclick: () => this.openNew(f.path + "/" + d, then) }, "▸ " + d)))),
+      !f.dirs.length ? h("p", { class: "muted small", text: "Não há pastas aqui dentro." }) : null,
+      f.more ? h("p", { class: "muted small", text: `E mais ${f.more} pastas que não cabem na lista.` }) : null,
+      dirs.length ? [h("h3", { text: "NAS PASTAS ONDE JÁ HÁ SESSÕES" }),
+        dirs.map((d) => h("div", { class: "copy-row" }, h("code", { class: "pre", text: Sin.home(d) }), h("button", { class: "btn", type: "button", onclick: () => go(d) }, "ABRIR AQUI")))] : null,
+      remote ? null : [h("h3", { text: "OU NUM TERMINAL TEU" }), row(`cd ${f.path} && claude`)],
+      h("p", { class: "muted small", text: "Duas sessões no mesmo repo? O sinaleiro trata dos cruzamentos." })]);
   },
   async openPhone() {
     if (Sin.raw?.viewer?.remote) return;
@@ -668,19 +700,7 @@ const Chat = {
     try { await Sin.post("api/say", { session: this.to, key: k }); this.screenAt = 0; setTimeout(() => this.tick(Sin.raw), 400); }
     catch (x) { UI.say("Não deu: " + x.message); }
   },
-  spawnDlg() {
-    const dirs = [...new Set((Sin.raw?.sessions || []).map((s) => s.cwd))];
-    const go = async (cwd) => {
-      try { const r = await Sin.post("api/spawn", { cwd }); UI.say(`Um Claude novo está a nascer em ${Sin.base(cwd)} (${r.tmux}). Aparece no chat daqui a pouco.`); this.open(); }
-      catch (x) { UI.say("Não deu: " + x.message); }
-    };
-    const inp = h("input", { type: "text", class: "chat-dir", placeholder: "~/Documentos/…", "aria-label": "Pasta" });
-    UI.list("+ CLAUDE NO TMUX", "Abre um Claude novo, já dentro do tmux, para lhe dares trabalho pelo chat.",
-      [dirs.map((d) => h("div", { class: "copy-row" }, h("code", { class: "pre", text: Sin.home(d) }), h("button", { class: "btn", type: "button", onclick: () => go(d) }, "ABRIR AQUI"))),
-        h("h3", { text: "NOUTRA PASTA" }),
-        h("div", { class: "copy-row" }, inp, h("button", { class: "btn primary", type: "button", onclick: () => inp.value.trim() && go(inp.value.trim()) }, "ABRIR")),
-        h("p", { class: "muted small", text: "No PC, para o veres: tmux ls e depois tmux attach -t <nome>." })]);
-  },
+  spawnDlg() { UI.openNew("", () => this.open()); }, // the same folder walk as + NOVA SESSÃO, back to the chat after
 };
 $("#chat-form").addEventListener("submit", (e) => Chat.send(e));
 $("#chat-text").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !matchMedia("(pointer: coarse)").matches) { e.preventDefault(); $("#chat-form").requestSubmit(); } });

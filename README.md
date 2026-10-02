@@ -189,10 +189,12 @@ o ecrã dele e escrever-lhe. Com `--chat`, a quinta (no PC ou no telemóvel) pas
 - **escreve um pedido** numa sessão, ou em todas de uma vez;
 - **mostra o ecrã do terminal,** onde aparecem as perguntas de permissão;
 - **responde às perguntas** com botões (`1`, `2`, `3`, `Enter`, `Esc`, setas, `Tab`), e só com essas teclas;
-- **abre um Claude novo** numa pasta dentro da tua pasta pessoal, num tmux à parte.
+- **abre um Claude novo** num tmux à parte: em "+ NOVA SESSÃO" (ou "+ CLAUDE" no chat) navegas pelas pastas a partir
+  de `~/Documentos` e escolhes "ABRIR CLAUDE AQUI". No PC abre também uma janela de terminal ligada a esse tmux
+  (xfce4-terminal, gnome-terminal ou konsole); do telemóvel, nunca.
 
 Para uma sessão aparecer no chat, tem de ser aberta dentro do tmux, por exemplo `tmux new -s nome claude`, ou pelo
-botão "+ CLAUDE" do chat.
+botão "+ NOVA SESSÃO" da quinta.
 
 > ⚠️ **Com `--chat`, quem entra na quinta pode escrever nos teus terminais**, ou seja, executar comandos no PC.
 > Usa-o só no teu Wi-Fi e com o telemóvel bloqueado.

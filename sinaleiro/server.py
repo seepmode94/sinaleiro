@@ -193,6 +193,12 @@ class Handler(BaseHTTPRequestHandler):
         if u.path == "/api/screen":
             pane = self._pane((parse_qs(u.query).get("id") or [""])[0])
             return self._json({"screen": tmux.screen(pane)}) if pane else self._json({"error": "sem chat"}, 404)
+        if u.path == "/api/dirs":
+            # the folders to walk to a new Claude's: only with the chat on (they're folder names, for the phone too)
+            if not getattr(self.server, "chat", False):
+                return self._json({"error": "o chat está desligado"}, 403)
+            f = tmux.folders((parse_qs(u.query).get("path") or [""])[0])
+            return self._json({**f, "root": tmux.browse_root()}) if f else self._json({"error": "pasta fora de alcance"}, 404)
         if u.path == "/api/session":
             sid = (parse_qs(u.query).get("id") or [""])[0]
             d = cli.detail(sid)
@@ -282,7 +288,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"error": "não consegui abrir um Claude nessa pasta"}, 400)
             store.event(db, "say", "", [], os.path.realpath(os.path.expanduser(body["cwd"])), "spawn",
                         name + (" · do telemóvel" if self._remote() else ""))
-            return self._json({"ok": True, "tmux": name})
+            # a terminal window on the PC's screen too, when asked from the PC (never from the phone)
+            win = bool(body.get("window")) and not self._remote() and tmux.window(name)
+            return self._json({"ok": True, "tmux": name, "window": win})
         if self.path in ("/api/release", "/api/grant"):
             if sid not in live:
                 return self._json({"error": "no such session"}, 404)

@@ -7,12 +7,14 @@ as if it came from the keyboard. We find the pane by the tty the session's proce
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import time
 
 KEYS = {"1", "2", "3", "Enter", "Escape", "Up", "Down", "Tab"}  # what the chat's buttons may press
 MAX_TEXT = 8000
+MAX_DIRS = 300  # folders the farm's browser lists in one folder
 _panes: tuple[float, dict[str, str]] = (0.0, {})
 
 
@@ -82,15 +84,62 @@ def say(pane: str, text: str) -> bool:
     return press(pane, "Enter")
 
 
+def _inside(path: str, root: str) -> str | None:
+    """`path` resolved (symlinks and .. too), if it's a folder that is `root` or under it; None otherwise."""
+    root = os.path.realpath(os.path.expanduser(root))
+    path = os.path.realpath(os.path.expanduser(path))
+    return path if os.path.isdir(path) and (path + os.sep).startswith(root + os.sep) else None
+
+
+def browse_root() -> str:
+    """Where the farm's folder browser starts, and the furthest up it goes: ~/Documentos (your home without one)."""
+    docs = os.path.realpath(os.path.expanduser("~/Documentos"))
+    return docs if os.path.isdir(docs) else os.path.realpath(os.path.expanduser("~"))
+
+
+def folders(path: str = "") -> dict | None:
+    """The folders inside `path` (under browse_root(); its root when empty), for the farm to walk to a new Claude's
+    folder: names only, no files and no hidden ones, at most MAX_DIRS. None for a path outside the root."""
+    root = browse_root()
+    path = _inside(path or root, root)
+    if not path:
+        return None
+    try:
+        with os.scandir(path) as it:
+            names = sorted((e.name for e in it if not e.name.startswith(".") and e.is_dir()), key=str.lower)
+    except OSError:
+        names = []
+    return {"path": path, "parent": os.path.dirname(path) if path != root else None,
+            "dirs": names[:MAX_DIRS], "more": max(0, len(names) - MAX_DIRS)}
+
+
 def spawn(cwd: str) -> str | None:
     """A new Claude in its own detached tmux session, in `cwd` (a folder under your home): the tmux session's name."""
-    home = os.path.realpath(os.path.expanduser("~"))
-    cwd = os.path.realpath(os.path.expanduser(cwd))
-    if not os.path.isdir(cwd) or not (cwd + os.sep).startswith(home + os.sep):
+    cwd = _inside(cwd, "~")
+    if not cwd:
         return None
-    name = f"claude-{os.path.basename(cwd) or 'home'}-{int(time.time()) % 100000}"
+    base = re.sub(r"[^A-Za-z0-9_-]+", "-", os.path.basename(cwd)).strip("-")  # tmux turns dots and colons into _
+    name = f"claude-{base or 'home'}-{int(time.time()) % 100000}"
     r = _tmux("new-session", "-d", "-s", name, "-c", cwd, "claude")
     return name if r and r.returncode == 0 else None
+
+
+def window(name: str) -> bool:
+    """A terminal window on this PC's screen, attached to the tmux session `name`, so you see the new Claude there
+    too. False without a screen or a terminal we know (the Claude keeps running in tmux either way)."""
+    exe_tmux = shutil.which("tmux")
+    if not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")) or not exe_tmux:
+        return False
+    attach = [exe_tmux, "attach", "-t", f"={name}"]
+    for exe, flag in (("xfce4-terminal", "-x"), ("gnome-terminal", "--"), ("konsole", "-e"), ("x-terminal-emulator", "-e")):
+        if shutil.which(exe):
+            try:
+                subprocess.Popen([exe, flag, *attach], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.DEVNULL, start_new_session=True)
+                return True
+            except OSError:
+                continue
+    return False
 
 
 def press(pane: str, key: str) -> bool:

@@ -231,6 +231,64 @@ def test_spawn_only_under_home(tmp_path, monkeypatch):
     assert tmux.spawn("~") is not None
 
 
+def test_spawn_names_a_tmux_session_tmux_accepts(tmp_path, monkeypatch):
+    from sinaleiro import tmux
+    monkeypatch.setattr(tmux.os.path, "expanduser", lambda p: p.replace("~", str(tmp_path), 1))
+    monkeypatch.setattr(tmux, "_tmux", lambda *a, **k: type("R", (), {"returncode": 0})())
+    (tmp_path / "um.repo: dois").mkdir()
+    name = tmux.spawn(str(tmp_path / "um.repo: dois"))
+    assert name.startswith("claude-um-repo-dois-") and "." not in name and ":" not in name
+
+
+@pytest.fixture
+def docs(tmp_path, monkeypatch):
+    """A home with Documentos (two folders, a hidden one, a file and a symlink out of it) and a folder outside it."""
+    from sinaleiro import tmux
+    monkeypatch.setattr(tmux.os.path, "expanduser", lambda p: p.replace("~", str(tmp_path), 1))
+    d = tmp_path / "Documentos"
+    for p in ("Projects/sinaleiro", "work", ".escondida"):
+        (d / p).mkdir(parents=True)
+    (d / "nota.md").write_text("x")
+    (tmp_path / "fora").mkdir()
+    (d / "atalho").symlink_to(tmp_path / "fora")
+    return d
+
+
+def test_folders_start_at_documentos_and_never_leave_it(docs):
+    from sinaleiro import tmux
+    f = tmux.folders()
+    assert f["path"] == str(docs) and f["parent"] is None
+    assert f["dirs"] == ["atalho", "Projects", "work"]  # folders only, no hidden ones, no files
+    assert tmux.folders(str(docs / "Projects"))["parent"] == str(docs)
+    assert tmux.folders(str(docs / "..")) is None
+    assert tmux.folders(str(docs / "atalho")) is None  # a symlink out of Documentos stays out
+    assert tmux.folders("/etc") is None
+
+
+def test_the_farm_lists_folders_only_with_the_chat_and_the_token(chat_farm, docs, farm):
+    srv, _ = chat_farm
+    port = srv.server_address[1]
+    st, body, _ = call(port, "GET", "/api/dirs?path=" + str(docs / "Projects"), host="localhost:7777", phone=False)
+    assert st == 200 and json.loads(body)["dirs"] == ["sinaleiro"]
+    assert call(port, "GET", "/api/dirs?path=/etc", host="localhost:7777", phone=False)[0] == 404
+    assert call(port, "GET", "/api/dirs")[0] == 401  # the phone, without the token
+    assert call(port, "GET", "/api/dirs", Cookie=cookie(port))[0] == 200
+    assert call(farm, "GET", "/api/dirs", host="localhost:7777", phone=False)[0] == 403  # no --chat, no folders
+
+
+def test_a_terminal_window_only_when_asked_from_the_pc(chat_farm, docs, monkeypatch):
+    from sinaleiro import tmux
+    srv, _ = chat_farm
+    port, wins = srv.server_address[1], []
+    monkeypatch.setattr(tmux, "spawn", lambda cwd: "claude-x-1")
+    monkeypatch.setattr(tmux, "window", lambda name: wins.append(name) or True)
+    st, body, _ = post_local(port, "/api/spawn", {"cwd": str(docs), "window": True})
+    assert st == 200 and json.loads(body)["window"] is True and wins == ["claude-x-1"]
+    hdr = {"X-Sinaleiro": "1", "Origin": f"http://{LAN}:7777"}
+    st, body, _ = call(port, "POST", "/api/spawn", body={"cwd": str(docs), "window": True}, Cookie=cookie(port), **hdr)
+    assert st == 200 and json.loads(body)["window"] is False and wins == ["claude-x-1"]  # not from the phone
+
+
 def test_tty_of_this_process_or_none():
     from sinaleiro import tmux
     t = tmux._tty_of(os.getpid())

@@ -42,6 +42,9 @@ select.mini { font: 8px/1 var(--font-px); padding: 5px 4px; border: 2px solid va
 .stat-row.help dt { font: 8px/1.6 var(--font-px); }
 .copy-row { margin: 0 0 8px; }
 .copy-row .pre { overflow-x: auto; white-space: nowrap; }
+.dir-list { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 6px; max-height: 40vh; overflow-y: auto; }
+.btn.dir { width: 100%; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dir-win { display: flex; gap: 8px; align-items: center; margin: 0 0 8px; }
 
 @media (max-width: 760px) {
   .roster-row { grid-template-columns: 36px minmax(0, 1fr); }
