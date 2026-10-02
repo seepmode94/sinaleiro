@@ -6,6 +6,10 @@ Quando duas sessões vão mexer no mesmo código, o Sinaleiro avisa-as ou trava-
 ficheiro. A quinta mostra cada sessão como um Claude, os sub-agentes como mini-Claudes, os tokens gastos e o limite de
 5 horas da conta. Também abre no telemóvel, no Wi-Fi de casa.
 
+![A quinta: cada sessão é um Claude, a trabalhar no talhão ou a dormir no pátio; o espantalho trava um cruzamento](docs/img/quinta.gif)
+
+<sub>As capturas deste README usam sessões inventadas.</sub>
+
 A quinta é a do [clodfarm](https://github.com/matank001/clodfarm), de Duke Security, Inc. (licença MIT). O
 Sinaleiro reaproveita o motor visual, os sprites e o estilo desse projeto e acrescenta por cima o árbitro, o limite
 de 5 horas e o acesso pelo telemóvel. Os detalhes estão em [Créditos](#créditos).
@@ -88,6 +92,8 @@ O hook pergunta ao árbitro antes de cada `Read`, `Edit`, `Write`, `MultiEdit` e
 - **Sozinho:** quando a sessão que tem o ficheiro fecha, ou quando passam 10 min sem lhe tocar (`SINALEIRO_TTL`,
   em segundos).
 
+![DECISÕES: duas sessões querem o mesmo ficheiro e escolhes quem fica com ele](docs/img/decisoes.png)
+
 **Limites:**
 - A sessão travada só fica a saber da decisão na próxima vez que tentar editar.
 - Em `bypassPermissions`, a recusa do hook não conta.
@@ -95,6 +101,8 @@ O hook pergunta ao árbitro antes de cada `Read`, `Edit`, `Write`, `MultiEdit` e
 ---
 
 ## A quinta
+
+![A quinta, com três Claudes a trabalhar, mini-Claudes nos talhões e o espantalho a pedir uma decisão](docs/img/quinta.png)
 
 A quinta mostra:
 
@@ -142,6 +150,8 @@ todo o trabalho local. Até aprender, o que corre aqui conta todo como "aqui".
 - quanto custa cada modelo: "100K tokens ≈ X % do limite";
 - a semana.
 
+![O cartão O LIMITE: percentagem, aqui e fora, o ritmo e quanto custa cada modelo](docs/img/limite.png)
+
 O espantalho avisa aos 80 % e aos 95 %.
 
 **O ladrão:** quando o consumo de fora sobe, aparece um Claude vermelho de gorro preto, que não trabalha no campo:
@@ -170,6 +180,8 @@ sinaleiro serve --lan
 **No telemóvel vês:** a quinta, as sessões, o pedido e a ferramenta de cada uma, os tokens e o limite. E podes tomar
 as decisões do 🔴.
 
+<img src="docs/img/telemovel.png" width="300" alt="A quinta no telemóvel, com a barra de botões em baixo">
+
 **O que fica só no PC:** as conversas (salvo `--show-convo`), o "+ NOVA SESSÃO" e o QR.
 
 O Sinaleiro escuta nos IPs privados da máquina, com o Wi-Fi primeiro, e ignora as redes do Docker e das máquinas
@@ -193,8 +205,12 @@ o ecrã dele e escrever-lhe. Com `--chat`, a quinta (no PC ou no telemóvel) pas
   de `~/Documentos` e escolhes "ABRIR CLAUDE AQUI". No PC abre também uma janela de terminal ligada a esse tmux
   (xfce4-terminal, gnome-terminal ou konsole); do telemóvel, nunca.
 
+![O chat: a conversa com um Claude, o ecrã do terminal com a pergunta de permissão e os botões para responder](docs/img/chat.png)
+
 Para uma sessão aparecer no chat, tem de ser aberta dentro do tmux, por exemplo `tmux new -s nome claude`, ou pelo
-botão "+ NOVA SESSÃO" da quinta.
+botão "+ NOVA SESSÃO" da quinta:
+
+![+ NOVA SESSÃO: navegar pelas pastas a partir de ~/Documentos e abrir um Claude lá](docs/img/nova-sessao.gif)
 
 > ⚠️ **Com `--chat`, quem entra na quinta pode escrever nos teus terminais**, ou seja, executar comandos no PC.
 > Usa-o só no teu Wi-Fi e com o telemóvel bloqueado.
@@ -257,6 +273,7 @@ ui/
   vendor/                o código do clodfarm (ver Créditos)
   fonts/                 Press Start 2P e VT323 (OFL)
 tests/                   pytest
+docs/img/                as capturas e os GIFs deste README (sessões inventadas)
 ```
 
 ---

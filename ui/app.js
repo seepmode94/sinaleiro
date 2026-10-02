@@ -471,7 +471,7 @@ const UI = {
       h("h3", { text: "ESCOLHE A PASTA" }),
       h("div", { class: "copy-row" }, h("code", { class: "pre", text: crumbs }),
         h("button", { class: "btn primary", type: "button", onclick: () => go(f.path) }, "ABRIR CLAUDE AQUI")),
-      win ? h("label", { class: "small dir-win" }, win, " Abrir também uma janela de terminal neste PC") : null,
+      win ? h("label", { class: "check dir-win" }, win, " Abrir também uma janela de terminal neste PC") : null,
       h("ul", { class: "dir-list" },
         f.parent ? h("li", {}, h("button", { class: "btn dir", type: "button", onclick: () => this.openNew(f.parent, then) }, "↑ ACIMA")) : null,
         f.dirs.map((d) => h("li", {}, h("button", { class: "btn dir", type: "button", onclick: () => this.openNew(f.path + "/" + d, then) }, "▸ " + d)))),
