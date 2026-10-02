@@ -21,12 +21,16 @@ CREATE TABLE IF NOT EXISTS events (ts REAL, light TEXT, session TEXT, others TEX
 CREATE TABLE IF NOT EXISTS warned (session TEXT, key TEXT, ts REAL, PRIMARY KEY (session, key));
 CREATE TABLE IF NOT EXISTS decisions (path TEXT, requester TEXT, holder TEXT, choice TEXT, ts REAL);
 CREATE TABLE IF NOT EXISTS looks (key TEXT PRIMARY KEY, look TEXT, ts REAL);
+CREATE TABLE IF NOT EXISTS limits (ts REAL, five REAL, five_reset REAL, week REAL, week_reset REAL);
+CREATE INDEX IF NOT EXISTS limits_ts ON limits (ts);
+CREATE TABLE IF NOT EXISTS phones (hash TEXT PRIMARY KEY, created REAL, seen REAL, expires REAL, agent TEXT);
 CREATE INDEX IF NOT EXISTS touches_ts ON touches (ts);
 CREATE INDEX IF NOT EXISTS events_ts ON events (ts);
 """
 
 
-def connect(path: str = DB_PATH) -> sqlite3.Connection:
+def connect(path: str | None = None) -> sqlite3.Connection:
+    path = path or DB_PATH
     os.makedirs(os.path.dirname(path), exist_ok=True)
     db = sqlite3.connect(path, timeout=2.0, isolation_level=None)
     db.execute("PRAGMA journal_mode=WAL")
@@ -77,7 +81,7 @@ def warn_once(db, session: str, key: str, ttl: float) -> bool:
 
 def prune(db):
     cut = time.time() - KEEP
-    for table in ("touches", "grants", "events", "warned", "decisions"):  # looks are kept
+    for table in ("touches", "grants", "events", "warned", "decisions", "limits"):  # looks are kept
         db.execute(f"DELETE FROM {table} WHERE ts < ?", (cut,))
 
 
@@ -102,3 +106,43 @@ def decide(db, path: str, requester: str, holder: str, choice: str):
 def decisions(db, since: float) -> list[dict]:
     return [{"path": r[0], "requester": r[1], "holder": r[2], "choice": r[3], "ts": r[4]} for r in db.execute(
         "SELECT path, requester, holder, choice, ts FROM decisions WHERE ts >= ? ORDER BY ts", (since,))]
+
+
+def limit(db, five: float, five_reset: float, week: float | None, week_reset: float | None, ts: float | None = None,
+          every: float = 120.0) -> bool:
+    """One reading of the account's limits, from the statusline. Every session's statusline calls this often, so a
+    reading is kept only when it moved, or when the last one is `every` seconds old."""
+    ts = ts or time.time()
+    row = db.execute("SELECT ts, five, five_reset FROM limits ORDER BY ts DESC LIMIT 1").fetchone()
+    if row and abs(row[1] - five) < 0.01 and abs(row[2] - five_reset) < 90 and ts - row[0] < every:
+        return False
+    db.execute("INSERT INTO limits VALUES (?,?,?,?,?)", (ts, five, five_reset, week, week_reset))
+    return True
+
+
+def limits(db, since: float) -> list[tuple[float, float, float, float | None, float | None]]:
+    return list(db.execute("SELECT ts, five, five_reset, week, week_reset FROM limits WHERE ts >= ? ORDER BY ts",
+                           (since,)))
+
+
+def phone_add(db, h: str, expires: float, agent: str = ""):
+    """A phone that traded the one-use link for a session: only the hash of its cookie is kept."""
+    now = time.time()
+    db.execute("INSERT OR REPLACE INTO phones VALUES (?,?,?,?,?)", (h, now, now, expires, agent))
+
+
+def phone_ok(db, h: str, now: float) -> bool:
+    row = db.execute("SELECT expires FROM phones WHERE hash=?", (h,)).fetchone()
+    if not row or row[0] < now:
+        return False
+    db.execute("UPDATE phones SET seen=? WHERE hash=?", (now, h))
+    return True
+
+
+def phones(db) -> list[dict]:
+    return [{"created": r[0], "seen": r[1], "expires": r[2], "agent": r[3]} for r in db.execute(
+        "SELECT created, seen, expires, agent FROM phones WHERE expires >= ? ORDER BY seen DESC", (time.time(),))]
+
+
+def phones_forget(db) -> int:
+    return db.execute("DELETE FROM phones").rowcount

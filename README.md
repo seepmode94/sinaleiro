@@ -27,13 +27,14 @@ Se a sessão morrer, ou passarem 10 min sem tocar no ficheiro (`SINALEIRO_TTL`, 
 ## Usar
 
 ```bash
-bin/sinaleiro install     # acrescenta o hook PreToolUse em ~/.claude/settings.json e ~/.local/bin/sinaleiro
+bin/sinaleiro install     # acrescenta o hook PreToolUse e a statusline em ~/.claude/settings.json, e ~/.local/bin/sinaleiro
 sinaleiro serve           # a quinta em http://localhost:7777 (só 127.0.0.1)
+sinaleiro serve --lan     # ...e também no Wi-Fi de casa, para o telemóvel: mostra um QR code com o link (token)
 sinaleiro status          # o mesmo no terminal
-sinaleiro uninstall       # tira o hook
+sinaleiro uninstall       # tira o hook e devolve a tua statusline
 ```
 
-As sessões já abertas só apanham o hook depois de reiniciadas.
+As sessões já abertas só apanham o hook e a statusline depois de reiniciadas.
 
 ## Como funciona
 
@@ -42,8 +43,23 @@ As sessões já abertas só apanham o hook depois de reiniciadas.
 - O hook (`Read|Edit|Write|MultiEdit|NotebookEdit`) regista cada toque em `~/.claude/sinaleiro/state.db`
   (SQLite, WAL) e pede a decisão a `sinaleiro/arbiter.py`, que só tem funções puras e testadas.
 - "Componente" = a pasta do ficheiro dentro do seu repo.
+- **O limite de 5 horas:** o Claude Code entrega à statusline a % usada da conta (`rate_limits.five_hour`). A
+  `sinaleiro statusline` guarda essas leituras e mostra a tua statusline anterior, se tinhas uma (guardada em
+  `~/.claude/sinaleiro/statusline.json`), com o mesmo input. `sinaleiro/limits.py` compara cada subida da % com os tokens
+  locais por modelo e aprende quanto vale cada um; o que os tokens daqui não explicam é "fora" (outro PC, apps).
+  A % só se atualiza quando uma sessão deste PC recebe uma resposta.
 
-Só biblioteca padrão do Python (3.10+). Testes: `python -m pytest tests`.
+- **No telemóvel (`serve --lan`):** escuta também nos IPs privados desta máquina (Wi-Fi primeiro; sem Docker/VMs).
+  O QR code (no terminal, ou na quinta do PC: TELEMÓVEL) abre `/#t=<token>`. O token serve **uma vez** e durante
+  15 min; a página troca-o por uma sessão própria desse telemóvel (cookie HttpOnly, SameSite=Strict, 30 dias). O PC só
+  guarda o hash de cada sessão. `--new-token` põe todos os telemóveis fora. As conversas ficam no PC (`--show-convo`
+  mostra-as também). É HTTP simples: só numa rede de confiança, e **sem túneis nem proxies à frente** (um pedido que
+  chega de 127.0.0.1 conta como o próprio PC).
+- **O ladrão:** quando a % da conta sobe mais do que os tokens deste PC explicam (outro computador, as apps), aparece
+  um Claude vermelho de gorro preto que vai ao lago tirar tokens. Fica enquanto houve consumo de fora nos últimos
+  20 min. Tocar nele (ou no lago) abre o limite.
+
+Só biblioteca padrão do Python (3.10+); o QR code usa o `qrencode`, se existir. Testes: `python -m pytest tests`.
 
 ## A quinta
 

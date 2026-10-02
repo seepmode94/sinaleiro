@@ -2,26 +2,33 @@
 
   sinaleiro hook                     PreToolUse hook (reads the call on stdin); installed by `sinaleiro install`
   sinaleiro serve [--port 7777]      the farm UI at http://localhost:7777
+        [--lan [--host IP]]          ...and on the home network, for your phone (a token, by QR code)
+        [--new-token] [--show-convo] a new phone link (the old one dies); show conversations on the phone too
+        [--chat]                     a chat that types into the sessions running in tmux (from the farm/phone)
   sinaleiro status                   live sessions, who holds what, the last calls the cop made
   sinaleiro grant <file> <session>   hand a file you're editing to another session
   sinaleiro release [file ...]       you're done with these files (no file: everything you hold)
-  sinaleiro install | uninstall      add / remove the hook in ~/.claude/settings.json (nothing else is touched)
+  sinaleiro statusline               statusline command (reads Claude Code's status on stdin): keeps the 5-hour
+                                     limit readings, then shows your previous statusline, if you had one
+  sinaleiro install | uninstall      add / remove the hook and the statusline in ~/.claude/settings.json
 """
 
 from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 import time
 
-from . import arbiter, sessions, store, transcripts
+from . import arbiter, limits, sessions, store, transcripts
 from .arbiter import Touch
 
 TTL = float(os.environ.get("SINALEIRO_TTL", arbiter.DEFAULT_TTL))
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BIN = os.path.join(HERE, "bin", "sinaleiro")
 MATCHER = "Read|Edit|Write|MultiEdit|NotebookEdit"
+PREV_STATUSLINE = os.path.join(os.path.dirname(store.DB_PATH), "statusline.json")  # yours, from before install
 
 
 def _names() -> tuple[dict[str, str], dict[str, str]]:
@@ -203,10 +210,20 @@ def state() -> dict:
         s["touching"] = [{"rel": os.path.relpath(t.path, t.repo), "kind": t.kind, "ts": t.ts, "hot": t.path in hot}
                          for t in recent]
     return {"now": now, "ttl": TTL, "sessions": live, "holds": holds, "conflicts": conflicts,
-            "tokens_today": transcripts.tokens_today(now), "decisions": pending,
+            "tokens_today": transcripts.tokens_today(now), "decisions": pending, "limit": limit_state(db, now),
             "events": [{**e, "session_name": names.get(e["session"], e["session"][:8]),
                         "other_names": [names.get(o, "anyone" if o == "*" else o[:8]) for o in e["others"]]}
                        for e in evs]}
+
+
+def limit_state(db, now: float) -> dict:
+    """The 5-hour window from the statusline readings, split into this machine vs outside; plus the week."""
+    rows = store.limits(db, now - 24 * 3600)
+    samples = [limits.Sample(r[0], r[1], r[2]) for r in rows]
+    out = limits.summary(samples, transcripts.burns_since(now - 24 * 3600 - limits.WINDOW), now)
+    if rows and rows[-1][3] is not None and (rows[-1][4] or 0) > now:
+        out["week"] = {"pct": rows[-1][3], "resets_at": rows[-1][4]}
+    return out
 
 
 def detail(session_id: str) -> dict:
@@ -226,6 +243,14 @@ def detail(session_id: str) -> dict:
 def status() -> int:
     st = state()
     nm = {s["id"]: s["name"] for s in st["sessions"]}
+    lim = st["limit"]
+    if lim.get("available") and lim.get("resets_at"):
+        reset = time.strftime("%H:%M", time.localtime(lim["resets_at"]))
+        eta = f", limit at {time.strftime('%H:%M', time.localtime(lim['eta']))} at this pace" if lim.get("eta") else ""
+        print(f"⏳ 5h: {lim['pct']:.0f}% (resets {reset}{eta}) · here {lim['here']:.0f}% · outside {lim['outside']:.0f}%"
+              + (" · still learning" if lim.get("learning") else ""))
+    elif not lim.get("available"):
+        print("⏳ 5h: no readings yet (the statusline brings them; restart the sessions after install)")
     print(f"{len(st['sessions'])} live session(s)")
     for s in st["sessions"]:
         print(f"  {'●' if s['status'] == 'busy' else '○'} {s['name']:<22} {s['cwd']}")
@@ -241,6 +266,47 @@ def status() -> int:
     return 0
 
 
+# ---------------------------------------------------------------- statusline
+def statusline() -> int:
+    """Keeps the account's 5-hour reading, then prints your previous statusline (fed the same input) or a short one.
+    Never fails loudly: a broken statusline would only blank the bottom of the terminal."""
+    raw = sys.stdin.buffer.read()
+    try:
+        data = json.loads(raw or b"{}")
+    except ValueError:
+        data = {}
+    lim = limits.from_statusline(data)
+    if lim:
+        try:
+            store.limit(store.connect(), *lim)
+        except Exception:  # noqa: BLE001 - a locked or broken db must not break the statusline
+            pass
+    prev = _prev_statusline()
+    if prev and prev.get("command"):
+        try:
+            r = subprocess.run(prev["command"], shell=True, input=raw, capture_output=True, timeout=5)
+            sys.stdout.buffer.write(r.stdout)
+            return 0
+        except (OSError, subprocess.SubprocessError):
+            pass
+    model = ((data.get("model") or {}).get("display_name") or "").strip()
+    bits = [f"🚦 {model}" if model else "🚦"]
+    if lim:
+        bits.append(f"5h {lim[0]:.0f}% ↺{time.strftime('%H:%M', time.localtime(lim[1]))}")
+        if lim[2] is not None:
+            bits.append(f"7d {lim[2]:.0f}%")
+    print(" · ".join(bits))
+    return 0
+
+
+def _prev_statusline() -> dict | None:
+    try:
+        with open(PREV_STATUSLINE) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
 # ---------------------------------------------------------------- install
 SETTINGS = os.path.join(sessions.CLAUDE_HOME, "settings.json")
 
@@ -249,8 +315,36 @@ def _ours(entry: dict) -> bool:
     return any("sinaleiro" in (h.get("command") or "") for h in entry.get("hooks", []))
 
 
+def _swap_statusline(cfg: dict, remove: bool) -> str:
+    """Puts `sinaleiro statusline` in statusLine, keeping yours (saved aside, run by ours with the same input), or
+    puts yours back. Returns a line for the person; it never prints what your statusline is."""
+    sl = cfg.get("statusLine")
+    ours = isinstance(sl, dict) and "sinaleiro" in (sl.get("command") or "")
+    if remove:
+        if not ours:
+            return ""
+        prev = _prev_statusline()
+        if prev:
+            cfg["statusLine"] = prev
+        else:
+            cfg.pop("statusLine", None)
+        if os.path.exists(PREV_STATUSLINE):
+            os.remove(PREV_STATUSLINE)
+        return "Your previous statusline is back." if prev else "Statusline removed."
+    if ours:
+        return "Statusline already in place."
+    if isinstance(sl, dict) and sl.get("command"):
+        os.makedirs(os.path.dirname(PREV_STATUSLINE), exist_ok=True)
+        with open(PREV_STATUSLINE, "w") as f:
+            json.dump(sl, f)
+        cfg["statusLine"] = {**sl, "type": "command", "command": f"{BIN} statusline"}
+        return "Statusline: yours stays as it was; sinaleiro reads the 5-hour limit on the way."
+    cfg["statusLine"] = {"type": "command", "command": f"{BIN} statusline"}
+    return "Statusline added (model · 5-hour limit · week): sinaleiro reads the 5-hour limit from it."
+
+
 def install(remove: bool = False) -> int:
-    """Edits only hooks.PreToolUse in settings.json, keeps everything else as it is, and prints none of it."""
+    """Edits only hooks.PreToolUse and statusLine in settings.json, keeps everything else, and prints none of it."""
     try:
         with open(SETTINGS) as f:
             cfg = json.load(f)
@@ -265,6 +359,7 @@ def install(remove: bool = False) -> int:
         cfg["hooks"].pop("PreToolUse", None)
         if not cfg["hooks"]:
             cfg.pop("hooks")
+    note = _swap_statusline(cfg, remove)
     tmp = SETTINGS + ".sinaleiro.tmp"
     with open(tmp, "w") as f:
         json.dump(cfg, f, indent=2)
@@ -274,12 +369,12 @@ def install(remove: bool = False) -> int:
     if remove:
         if os.path.islink(link):
             os.remove(link)
-        print("sinaleiro hook removed. Sessions started from now on won't see the cop.")
+        print(f"sinaleiro hook removed. Sessions started from now on won't see the cop. {note}")
     else:
         os.makedirs(os.path.dirname(link), exist_ok=True)
         if not os.path.exists(link):
             os.symlink(BIN, link)
-        print(f"sinaleiro hook installed ({MATCHER}). New sessions pick it up; restart open ones (or /hooks).")
+        print(f"sinaleiro hook installed ({MATCHER}). {note} New sessions pick it up; restart open ones (or /hooks).")
     return 0
 
 
@@ -291,9 +386,13 @@ def main(argv: list[str] | None = None) -> int:
     if cmd == "serve":
         from .server import serve
         port = int(args[args.index("--port") + 1]) if "--port" in args else 7777
-        return serve(port)
+        host = args[args.index("--host") + 1] if "--host" in args else None
+        return serve(port, lan="--lan" in args or host is not None, host=host, new_token="--new-token" in args,
+                     show_convo="--show-convo" in args, chat="--chat" in args)
     if cmd == "status":
         return status()
+    if cmd == "statusline":
+        return statusline()
     if cmd == "grant":
         return grant(args)
     if cmd == "release":

@@ -14,6 +14,7 @@
 <script src="vendor/engine.js" defer></script>
 <script src="vendor/picker.js" defer></script>
 <script src="app.js" defer></script>
+<script src="ladrao.js" defer></script>
 </head>
 <body>
 <canvas id="world" aria-label="A quinta: cada sessão Claude aberta nesta máquina é um Claude; o espantalho é o árbitro quando duas se cruzam"></canvas>
@@ -25,6 +26,11 @@
       <span class="tok-big"><span class="fire" aria-hidden="true">🔥</span> <b id="tok-total">0</b> TOKENS</span>
       <span class="tok-today" id="tok-today">hoje, em toda a quinta</span>
       <span class="sign tok-sign" id="tokens-sign" role="tooltip"></span>
+    </button>
+    <button type="button" class="limit" id="limit" data-act="limit" aria-label="O limite de 5 horas (L)">
+      <span class="lim-top"><span aria-hidden="true">⏳</span> 5H <b id="lim-pct">–</b><span class="lim-reset" id="lim-reset"></span></span>
+      <span class="lim-bar" aria-hidden="true"><i class="here" id="lim-here"></i><i class="out" id="lim-out"></i></span>
+      <span class="lim-note" id="lim-note">à espera da 1.ª leitura</span>
     </button>
     <button type="button" class="chip approve-chip" id="approve-chip" data-act="decisions" hidden></button>
     <div class="chips" id="chips" aria-live="polite"></div>
@@ -38,16 +44,18 @@
 
   <nav class="dock" id="dock" aria-label="Ações da quinta">
     <button type="button" class="tool help-tool" data-act="help" data-tip="O que é o quê" data-desc="Cada botão e cada coisa da quinta, explicados" data-key="?" aria-label="Ajuda (?)"><span class="q" aria-hidden="true">?</span><span class="lbl">AJUDA</span></button>
-    <div class="dock-group" data-cap="A QUINTA">
+    <div class="dock-group" data-cap="A QUINTA" style="--n:2">
       <button type="button" class="tool" data-act="roster" data-tip="Todas as sessões" data-desc="Quem está a trabalhar, em espera ou a dormir" data-key="R" aria-label="Todas as sessões (R)"><img alt="" data-icon="roster"><span class="lbl">SESSÕES</span></button>
-      <button type="button" class="tool" data-act="tasks" data-tip="Sub-agentes" data-desc="Os mini-Claudes, a trabalhar ou já colhidos" data-key="J" aria-label="Sub-agentes (J)"><img alt="" data-icon="tasks"><span class="lbl">SUB-AGENTES</span></button>
+      <button type="button" class="tool" data-act="tasks" data-tip="Sub-agentes" data-desc="Os mini-Claudes, a trabalhar ou já colhidos" data-key="J" aria-label="Sub-agentes (J)"><img alt="" data-icon="tasks"><span class="lbl" data-short="MINIS">SUB-AGENTES</span></button>
       <button type="button" class="tool" data-act="mail" data-tip="Correio" data-desc="As mensagens que as sessões trocaram entre si" data-key="M" aria-label="Correio (M)"><img alt="" data-icon="chat"><span class="lbl">CORREIO</span></button>
     </div>
-    <div class="dock-group" data-cap="O ESPANTALHO">
-      <button type="button" class="tool dec-tool" data-act="decisions" id="dec-tool" data-tip="Decisões" data-desc="Edições travadas: decide quem fica com o ficheiro" data-key="D" aria-label="Decisões (D)"><img alt="" data-icon="ask"><span class="lbl">DECISÕES</span><span class="dec-n" id="dec-n" hidden>0</span></button>
-      <button type="button" class="tool" data-act="cop" data-tip="Cruzamentos" data-desc="Onde duas sessões se cruzam, e quem tem cada ficheiro" data-key="X" aria-label="Cruzamentos (X)"><img alt="" data-icon="swords"><span class="lbl">CRUZAMENTOS</span></button>
-      <button type="button" class="tool" data-act="events" data-tip="Ocorrências" data-desc="Tudo o que o sinaleiro fez: avisos, paragens e passagens" data-key="O" aria-label="Ocorrências (O)"><img alt="" data-icon="scroll"><span class="lbl">OCORRÊNCIAS</span></button>
+    <div class="dock-group" data-cap="O ESPANTALHO" style="--n:3">
+      <button type="button" class="tool dec-tool" data-act="decisions" id="dec-tool" data-tip="Decisões" data-desc="Edições travadas: decide quem fica com o ficheiro" data-key="D" aria-label="Decisões (D)"><img alt="" data-icon="ask"><span class="lbl" data-short="DECIS.">DECISÕES</span><span class="dec-n" id="dec-n" hidden>0</span></button>
+      <button type="button" class="tool" data-act="cop" data-tip="Cruzamentos" data-desc="Onde duas sessões se cruzam, e quem tem cada ficheiro" data-key="X" aria-label="Cruzamentos (X)"><img alt="" data-icon="swords"><span class="lbl" data-short="CRUZ.">CRUZAMENTOS</span></button>
+      <button type="button" class="tool" data-act="events" data-tip="Ocorrências" data-desc="Tudo o que o sinaleiro fez: avisos, paragens e passagens" data-key="O" aria-label="Ocorrências (O)"><img alt="" data-icon="scroll"><span class="lbl" data-short="OCORR.">OCORRÊNCIAS</span></button>
     </div>
+    <button type="button" class="tool chat-tool" data-act="chat" data-tip="Chat" data-desc="Fala com os Claudes que correm no tmux: dá-lhes trabalho, responde às permissões" data-key="C" aria-label="Chat (C)" hidden><span class="ph" aria-hidden="true">💬</span><span class="lbl">CHAT</span><span class="dec-n" id="chat-n" hidden>0</span></button>
+    <button type="button" class="tool phone-tool" data-act="phone" data-tip="Continuar no telemóvel" data-desc="O QR code para abrir esta quinta no telemóvel" data-key="T" aria-label="Continuar no telemóvel (T)"><span class="ph" aria-hidden="true">📱</span><span class="lbl">TELEMÓVEL</span></button>
     <button type="button" class="tool hatch-tool" data-act="new" data-tip="Nova sessão" data-desc="Como abrir mais um Claude nesta quinta" data-key="N" aria-label="Nova sessão (N)"><img alt="" data-icon="egg"><span class="lbl">+ NOVA SESSÃO</span></button>
   </nav>
 
@@ -85,6 +93,23 @@
   <p class="muted small" id="look-sub"></p>
   <div id="look-body"></div>
   <div class="dlg-actions save-bar" id="look-actions"></div>
+  <button class="x" type="button" data-close aria-label="Fechar">✕</button>
+</dialog>
+
+<dialog id="dlg-chat" class="panel dlg wide sheet chat-dlg" aria-labelledby="chat-h">
+  <h2 id="chat-h">CHAT</h2>
+  <div class="chat-to" id="chat-to" role="radiogroup" aria-label="Para quem"></div>
+  <div class="talk chat-feed" id="chat-feed" aria-live="polite"></div>
+  <details class="chat-screen" id="chat-screen-box">
+    <summary>ECRÃ DO TERMINAL <span class="muted small" id="chat-screen-who"></span></summary>
+    <pre id="chat-screen"></pre>
+    <div class="chat-keys" id="chat-keys"></div>
+  </details>
+  <form class="chat-compose" id="chat-form">
+    <textarea id="chat-text" rows="2" placeholder="Escreve o trabalho… (@nome para outro Claude, @todos para todos)" aria-label="Mensagem"></textarea>
+    <button class="btn primary" type="submit">ENVIAR</button>
+  </form>
+  <p class="muted small" id="chat-note"></p>
   <button class="x" type="button" data-close aria-label="Fechar">✕</button>
 </dialog>
 

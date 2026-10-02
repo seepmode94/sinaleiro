@@ -16,6 +16,7 @@ import time
 from collections import deque
 from datetime import datetime
 
+from .limits import family
 from .sessions import CLAUDE_HOME
 
 EDIT_TOOLS = ("Edit", "Write", "MultiEdit", "NotebookEdit")
@@ -24,6 +25,7 @@ NOTE_ID = re.compile(r"<tool-use-id>(toolu_[A-Za-z0-9]+)</tool-use-id>")
 NOTE_STATUS = re.compile(r"<status>(\w+)</status>")
 NOTE_TASK = re.compile(r"<task-id>([A-Za-z0-9]+)</task-id>")
 AGENT_ID = re.compile(r"agentId: ([A-Za-z0-9]+)")
+BURNS_KEEP = 26 * 3600
 
 
 def _ts(iso) -> float:
@@ -68,7 +70,9 @@ class Transcript:
         self.agents: dict[str, dict] = {}
         self.sent: list[dict] = []
         self.tokens: dict[str, int] = {}
-        self.seen_msgs: set[str] = set()
+        # message id -> (ts, model family, tokens): a reply is written once per content block, the first lines with a
+        # provisional output count, so a later line of the same id replaces what its earlier ones counted
+        self.burns: dict[str, tuple[float, str | None, int]] = {}
         self.convo: deque = deque(maxlen=60)
         self.last_at = 0.0
 
@@ -113,6 +117,20 @@ class Transcript:
             self.last_at = max(self.last_at, ts)
         msg = e.get("message") or {}
         content = msg.get("content")
+        if e.get("type") == "assistant":  # tokens first: a sub-agent's (sidechain) spend the same limit
+            mid, usage = msg.get("id"), msg.get("usage") or {}
+            if mid and usage:
+                n = sum(int(usage.get(k) or 0) for k in ("input_tokens", "output_tokens", "cache_creation_input_tokens"))
+                old = self.burns.get(mid)
+                if old:  # the same reply again: count the difference, keep its first timestamp
+                    ts = old[0]
+                    self.tokens[_day(ts)] = self.tokens.get(_day(ts), 0) + n - old[2]
+                else:
+                    self.tokens[_day(ts)] = self.tokens.get(_day(ts), 0) + n
+                self.burns[mid] = (ts, family(msg.get("model")), n)
+                if len(self.burns) > 6000:
+                    cut = time.time() - BURNS_KEEP
+                    self.burns = {k: b for k, b in self.burns.items() if b[0] >= cut}
         if e.get("isSidechain"):
             return
         if e.get("type") == "user":
@@ -134,11 +152,6 @@ class Transcript:
                         a["status"] = "failed" if c.get("is_error") else "done"
                         a["ended"] = ts
         elif e.get("type") == "assistant":
-            mid, usage = msg.get("id"), msg.get("usage") or {}
-            if mid and usage and mid not in self.seen_msgs:
-                self.seen_msgs.add(mid)
-                n = sum(int(usage.get(k) or 0) for k in ("input_tokens", "output_tokens", "cache_creation_input_tokens"))
-                self.tokens[_day(ts)] = self.tokens.get(_day(ts), 0) + n
             for c in content if isinstance(content, list) else []:
                 if not isinstance(c, dict):
                     continue
@@ -195,11 +208,11 @@ def find(session_id: str) -> str | None:
 
 
 def tokens_today(now: float | None = None) -> int:
-    """Every transcript written today, live session or not: the farm's tokens for the day."""
+    """Every transcript written today, live session or not, sub-agents' included: the farm's tokens for the day."""
     now = now or time.time()
     midnight = time.mktime(time.localtime(now)[:3] + (0, 0, 0, 0, 0, -1))
     total = 0
-    for p in glob.glob(os.path.join(CLAUDE_HOME, "projects", "*", "*.jsonl")):
+    for p in _files():
         try:
             if os.path.getmtime(p) < midnight:
                 continue
@@ -207,3 +220,29 @@ def tokens_today(now: float | None = None) -> int:
             continue
         total += get(p).tokens.get(_day(now), 0)
     return total
+
+
+def burns_since(since: float) -> list[tuple[float, str, int]]:
+    """Every local (ts, model family, tokens) since `since`, across all transcripts, sub-agents' included: they spend
+    the same limit."""
+    out = []
+    for p in _files():
+        try:
+            if os.path.getmtime(p) < since:
+                continue
+        except OSError:
+            continue
+        out += [b for b in get(p).burns.values() if b[0] >= since and b[1] and b[2]]
+    return sorted(out)
+
+
+_listing: tuple[float, list[str]] = (0.0, [])
+
+
+def _files() -> list[str]:
+    """Every transcript, the sessions' and their sub-agents' (they spend the same tokens), listed at most every 5 s."""
+    global _listing
+    if time.time() - _listing[0] > 5:
+        _listing = (time.time(), glob.glob(os.path.join(CLAUDE_HOME, "projects", "*", "*.jsonl")) +
+                    glob.glob(os.path.join(CLAUDE_HOME, "projects", "*", "*", "subagents", "*.jsonl")))
+    return _listing[1]
