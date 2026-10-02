@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#4f6b25">
+<meta name="robots" content="noindex, nofollow">
+<title>Sinaleiro</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8' shape-rendering='crispEdges'><rect x='2' y='0' width='4' height='8' fill='%23222'/><rect x='3' y='1' width='2' height='2' fill='%23e5484d'/><rect x='3' y='3' width='2' height='2' fill='%23f5c542'/><rect x='3' y='5' width='2' height='2' fill='%2346c46e'/></svg>">
+<link rel="preload" href="fonts/PressStart2P.ttf" as="font" type="font/ttf" crossorigin>
+<link rel="stylesheet" href="vendor/clodfarm.css">
+<link rel="stylesheet" href="sinaleiro.css">
+<script src="vendor/engine.js" defer></script>
+<script src="vendor/picker.js" defer></script>
+<script src="app.js" defer></script>
+</head>
+<body>
+<canvas id="world" aria-label="A quinta: cada sessão Claude aberta nesta máquina é um Claude; o espantalho é o árbitro quando duas se cruzam"></canvas>
+<div id="labels" aria-hidden="true"></div>
+
+<div id="hud">
+  <div class="hud-top" id="hud-top">
+    <button type="button" class="tokens" id="tokens" aria-describedby="tokens-sign">
+      <span class="tok-big"><span class="fire" aria-hidden="true">🔥</span> <b id="tok-total">0</b> TOKENS</span>
+      <span class="tok-today" id="tok-today">hoje, em toda a quinta</span>
+      <span class="sign tok-sign" id="tokens-sign" role="tooltip"></span>
+    </button>
+    <button type="button" class="chip approve-chip" id="approve-chip" data-act="decisions" hidden></button>
+    <div class="chips" id="chips" aria-live="polite"></div>
+  </div>
+
+  <div class="cam-tools" role="toolbar" aria-label="Câmara">
+    <button type="button" class="tool cam" data-act="zoomin" data-tip="Aproximar" data-key="+" aria-label="Aproximar (+)"><img alt="" data-icon="plus"></button>
+    <button type="button" class="tool cam" data-act="zoomout" data-tip="Afastar" data-key="-" aria-label="Afastar (-)"><img alt="" data-icon="minus"></button>
+    <button type="button" class="tool cam" data-act="fit" data-tip="Ver a quinta toda" data-key="0" aria-label="Ver a quinta toda (0)"><img alt="" data-icon="fit"></button>
+  </div>
+
+  <nav class="dock" id="dock" aria-label="Ações da quinta">
+    <button type="button" class="tool help-tool" data-act="help" data-tip="O que é o quê" data-desc="Cada botão e cada coisa da quinta, explicados" data-key="?" aria-label="Ajuda (?)"><span class="q" aria-hidden="true">?</span><span class="lbl">AJUDA</span></button>
+    <div class="dock-group" data-cap="A QUINTA">
+      <button type="button" class="tool" data-act="roster" data-tip="Todas as sessões" data-desc="Quem está a trabalhar, em espera ou a dormir" data-key="R" aria-label="Todas as sessões (R)"><img alt="" data-icon="roster"><span class="lbl">SESSÕES</span></button>
+      <button type="button" class="tool" data-act="tasks" data-tip="Sub-agentes" data-desc="Os mini-Claudes, a trabalhar ou já colhidos" data-key="J" aria-label="Sub-agentes (J)"><img alt="" data-icon="tasks"><span class="lbl">SUB-AGENTES</span></button>
+      <button type="button" class="tool" data-act="mail" data-tip="Correio" data-desc="As mensagens que as sessões trocaram entre si" data-key="M" aria-label="Correio (M)"><img alt="" data-icon="chat"><span class="lbl">CORREIO</span></button>
+    </div>
+    <div class="dock-group" data-cap="O ESPANTALHO">
+      <button type="button" class="tool dec-tool" data-act="decisions" id="dec-tool" data-tip="Decisões" data-desc="Edições travadas: decide quem fica com o ficheiro" data-key="D" aria-label="Decisões (D)"><img alt="" data-icon="ask"><span class="lbl">DECISÕES</span><span class="dec-n" id="dec-n" hidden>0</span></button>
+      <button type="button" class="tool" data-act="cop" data-tip="Cruzamentos" data-desc="Onde duas sessões se cruzam, e quem tem cada ficheiro" data-key="X" aria-label="Cruzamentos (X)"><img alt="" data-icon="swords"><span class="lbl">CRUZAMENTOS</span></button>
+      <button type="button" class="tool" data-act="events" data-tip="Ocorrências" data-desc="Tudo o que o sinaleiro fez: avisos, paragens e passagens" data-key="O" aria-label="Ocorrências (O)"><img alt="" data-icon="scroll"><span class="lbl">OCORRÊNCIAS</span></button>
+    </div>
+    <button type="button" class="tool hatch-tool" data-act="new" data-tip="Nova sessão" data-desc="Como abrir mais um Claude nesta quinta" data-key="N" aria-label="Nova sessão (N)"><img alt="" data-icon="egg"><span class="lbl">+ NOVA SESSÃO</span></button>
+  </nav>
+
+  <div id="textbox" class="textbox idle" role="status" aria-live="polite">
+    <p id="textbox-text"></p><span class="more" aria-hidden="true">▼</span>
+  </div>
+  <div id="offline" class="chip warn offline" hidden><span class="dot off"></span>SEM LIGAÇÃO · CORRE <b>sinaleiro serve</b></div>
+</div>
+
+<!-- ================================= dialogs ================================= -->
+<dialog id="dlg-summary" class="panel dlg" aria-labelledby="sum-name">
+  <div class="sum-head">
+    <canvas class="sum-sprite" id="sum-sprite" width="96" height="96" aria-hidden="true"></canvas>
+    <div>
+      <h2 id="sum-name">CLAUDE</h2>
+      <p class="muted" id="sum-sub"></p>
+      <div class="sum-top" id="sum-top"></div>
+    </div>
+  </div>
+  <div id="sum-body"></div>
+  <div class="dlg-actions save-bar" id="sum-actions"></div>
+  <button class="x" type="button" data-close aria-label="Fechar">✕</button>
+</dialog>
+
+<dialog id="dlg-talk" class="panel dlg wide" aria-labelledby="talk-h">
+  <p class="kicker" id="talk-kicker"></p>
+  <h2 id="talk-h"></h2>
+  <div id="talk-body" class="talk"></div>
+  <div class="dlg-actions" id="talk-actions"></div>
+  <button class="x" type="button" data-close aria-label="Fechar">✕</button>
+</dialog>
+
+<dialog id="dlg-look" class="panel dlg roomy" aria-labelledby="look-h">
+  <h2 id="look-h">APARÊNCIA</h2>
+  <p class="muted small" id="look-sub"></p>
+  <div id="look-body"></div>
+  <div class="dlg-actions save-bar" id="look-actions"></div>
+  <button class="x" type="button" data-close aria-label="Fechar">✕</button>
+</dialog>
+
+<dialog id="dlg-list" class="panel dlg wide sheet" aria-labelledby="list-h">
+  <h2 id="list-h"></h2>
+  <p class="muted small" id="list-sub"></p>
+  <div id="list-body"></div>
+  <button class="x" type="button" data-close aria-label="Fechar">✕</button>
+</dialog>
+</body>
+</html>
